@@ -21,6 +21,9 @@ class Point(list):
     def __sub__(a, b):
         return Point(a[i] - b[i] for i in range(len(a)))
 
+    def __neg__(a):
+        return Point(-a[i] for i in range(len(a)))
+
     def __mul__(a, b):
         if type(a) == type(b):
             return Point(a[i] * b[i] for i in range(len(a)))
@@ -46,6 +49,106 @@ class Point(list):
     @property
     def y(self):
         return self[1]
+
+
+class Shape:
+    def __init__(self, pieces):
+        self.pieces = pieces
+
+    def cut(self, a, b):
+        """ Cut shape (and all sub pieces) with given line """
+        pass
+
+    def rotate(self, pivot, angle):
+        """ Rotate shape around pivot"""
+        for piece in self.pieces:
+            piece.rotate(pivot, angle)
+
+    def translate(self, vector):
+        """ Move all points by given vector"""
+        for piece in self.pieces:
+            piece.translate(vector)
+
+    def apply_transform(self, transform):
+        """ Apply the given transform to all pieces """
+        for piece in self.pieces:
+            piece.apply_transform(transform)
+
+    def bbox(self):
+        min_x = float('inf')
+        min_y = min_x
+        max_x = float('-inf')
+        max_y = max_x
+
+        for piece in self.pieces:
+            for point in piece:
+                min_x = min(min_x, point.x)
+                max_x = max(max_x, point.x)
+                min_y = min(min_y, point.y)
+                max_y = max(max_y, point.y)
+        return make_poly([(min_x, min_y), (min_x, max_y), (max_x, max_y), (max_x, min_y)])
+
+
+class Piece:
+    def __init__(self, poly, transform=None):
+        self.transform = transform or identity_transform()
+        self.poly = make_poly(poly)
+
+    def __iter__(self):
+        pass
+
+    def plot(self):
+        return plot_poly(self.poly)
+
+    def translate(self, vector):
+        self.apply_transform(translation_matrix(vector))
+
+    def rotate(self, pivot, radians):
+        center = translation_matrix(-pivot)
+        rotate = rotation_matrix(radians)
+        uncenter = translation_matrix(pivot)
+        self.apply_transform(np.dot(np.dot(uncenter, rotate), center))
+
+    def apply_transform(self, transform):
+        self.transform = np.dot(transform, self.transform)
+        for i, point in enumerate(self.poly):
+            self.poly[i] = transform_point(point, transform)
+
+    def inverse_transform(self):
+        return np.linalg.inv(self.transform)
+
+    def cut(self, a, b):
+        result = split_convex_poly(self.poly, a, b)
+        if result is None:
+            return self
+        # Split pieces have same transform so far
+        return Piece(result[0], self.transform), Piece(result[1], self.transform)
+
+    def original_position(self):
+        inverse = self.inverse_transform()
+        return make_poly(transform_point(p, inverse) for p in self.poly)
+
+
+def transform_point(p, transform):
+    return Point(np.dot(transform, [p.x, p.y, 1])[:2])
+
+
+def translation_matrix(vector):
+    return np.array([[1, 0, vector[0]],
+                     [0, 1, vector[1]],
+                     [0, 0, 1]])
+
+
+def rotation_matrix(radians):
+    sa = math.sin(radians)
+    ca = math.cos(radians)
+    return np.array([[ca, sa, 0],
+                     [-sa, ca, 0],
+                     [0, 0, 1]])
+
+
+def identity_transform():
+    return np.identity(3)
 
 
 def make_poly(points):
@@ -131,6 +234,10 @@ def ccw(a, b, c):
         else:
             # a -- b -- c
             return 2
+
+
+def polygon_side(poly, a, b):
+    pass
 
 
 def intersect(p, pr, q, qs):
