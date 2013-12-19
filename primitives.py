@@ -5,7 +5,7 @@ import matplotlib.pylab as plt
 
 def plot_poly(poly):
     x, y = zip(*(poly + [poly[0]]))
-    return plt.plot(x, y)
+    plt.plot(x, y)
 
 
 def plot_polys(polys):
@@ -14,33 +14,10 @@ def plot_polys(polys):
         plot_poly(poly)
 
 
-class Point(list):
-    def __add__(a, b):
-        return Point(a[i] + b[i] for i in range(len(a)))
-
-    def __sub__(a, b):
-        return Point(a[i] - b[i] for i in range(len(a)))
-
-    def __neg__(a):
-        return Point(-a[i] for i in range(len(a)))
-
-    def __mul__(a, b):
-        if type(a) == type(b):
-            return Point(a[i] * b[i] for i in range(len(a)))
-        else:
-            return Point(v * b for v in a)
-
-    def __div__(a, b):
-        if type(a) == type(b):
-            return Point(a[i] / b[i] for i in range(len(a)))
-        else:
-            return Point(v / b for v in a)
-
-    def __rmul__(a, b):
-        return a.__mul__(b)
-
-    def abs(a):
-        return tuple(abs(v) for v in a)
+class Point(np.ndarray):
+    def __new__(self, vals):
+        obj = np.asarray(vals).view(self)
+        return obj
 
     @property
     def x(self):
@@ -54,6 +31,14 @@ class Point(list):
 class Shape:
     def __init__(self, pieces):
         self.pieces = pieces
+
+    def __iter__(self):
+        """ Iterate over pieces of the shape """
+        for piece in self.pieces:
+            yield piece
+
+    def combine(self, other):
+        return Shape(self.pieces + other.pieces)
 
     def cut(self, a, b):
         """ Cut shape (and all sub pieces) with given line """
@@ -88,6 +73,10 @@ class Shape:
                 max_y = max(max_y, point.y)
         return make_poly([(min_x, min_y), (min_x, max_y), (max_x, max_y), (max_x, min_y)])
 
+    def plot(self):
+        for piece in self.pieces:
+            piece.plot()
+
 
 class Piece:
     def __init__(self, poly, transform=None):
@@ -95,7 +84,9 @@ class Piece:
         self.poly = make_poly(poly)
 
     def __iter__(self):
-        pass
+        """ Iterate over points of the piece """
+        for p in self.poly:
+            yield p
 
     def plot(self):
         return plot_poly(self.poly)
