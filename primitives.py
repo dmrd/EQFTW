@@ -1,6 +1,7 @@
 import math
 import numpy as np
 import matplotlib.pylab as plt
+from scipy.spatial import ConvexHull
 
 
 def plot_poly(poly):
@@ -113,6 +114,13 @@ class Shape:
                 min_y = min(min_y, point.y)
                 max_y = max(max_y, point.y)
         return make_poly([(min_x, min_y), (min_x, max_y), (max_x, max_y), (max_x, min_y)])
+
+    def hull(self):
+        points = []
+        for piece in self.pieces:
+            points.extend(piece.poly)
+        points = np.asarray(points)
+        return make_poly(points[ConvexHull(points).vertices])
 
     def plot(self):
         for piece in self.pieces:
