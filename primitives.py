@@ -1,7 +1,6 @@
 import math
 import numpy as np
 import matplotlib.pylab as plt
-from functools import total_ordering
 
 
 def plot_poly(poly):
@@ -16,8 +15,13 @@ def plot_polys(polys):
 
 
 class Point(np.ndarray):
-    def __new__(self, vals):
-        assert(len(vals) == 2)
+    def __new__(self, x, y=None):
+        """ Point(x, y) or Point([x, y]) """
+        if y is None:
+            assert(len(x) == 2)
+            vals = x
+        else:
+            vals = [x, y]
         obj = np.asarray(vals).view(self)
         return obj
 
@@ -39,6 +43,9 @@ class Point(np.ndarray):
     def __le__(a, b):
         return a == b or a < b
 
+    def __repr__(self):
+        return str((self.x, self.y))
+
     @property
     def x(self):
         return self[0]
@@ -57,12 +64,26 @@ class Shape:
         for piece in self.pieces:
             yield piece
 
+    def __repr__(self):
+        return str(self.pieces)
+
     def combine(self, other):
         return Shape(self.pieces + other.pieces)
 
     def cut(self, a, b):
-        """ Cut shape (and all sub pieces) with given line """
-        pass
+        """
+        Cut shape (and all sub pieces) with given line.
+        Return two shapes, one with all pieces to left
+        """
+        left = []
+        right = []
+        for piece in self.pieces:
+            l, r = piece.cut(a, b)
+            if l is not None:
+                left.append(l)
+            if r is not None:
+                right.append(r)
+        return Shape(left), Shape(right)
 
     def rotate(self, pivot, angle):
         """ Rotate shape around pivot"""
@@ -97,16 +118,24 @@ class Shape:
         for piece in self.pieces:
             piece.plot()
 
+    def original_position(self):
+        return Shape([piece.original_position() for piece in self.pieces])
+
 
 class Piece:
     def __init__(self, poly, transform=None):
-        self.transform = transform or identity_transform()
+        if transform is None:
+            transform = identity_transform()
+        self.transform = transform
         self.poly = make_poly(poly)
 
     def __iter__(self):
         """ Iterate over points of the piece """
         for p in self.poly:
             yield p
+
+    def __repr__(self):
+        return str(self.poly)
 
     def plot(self):
         return plot_poly(self.poly)
@@ -132,12 +161,16 @@ class Piece:
         result = split_convex_poly(self.poly, a, b)
         if result is None:
             return self
+
         # Split pieces have same transform so far
-        return Piece(result[0], self.transform), Piece(result[1], self.transform)
+        p1 = result[0] and Piece(result[0], self.transform)
+        p2 = result[1] and Piece(result[1], self.transform)
+
+        return p1, p2
 
     def original_position(self):
         inverse = self.inverse_transform()
-        return make_poly(transform_point(p, inverse) for p in self.poly)
+        return Piece(make_poly(transform_point(p, inverse) for p in self.poly))
 
 
 def transform_point(p, transform):
@@ -261,7 +294,7 @@ def intersect(p, pr, q, qs):
     Intersect two lines specified by endpoints (p, pe) and (q, qe).
     Returns a tuple of (parametric distance along p-pr, intersection point)
 
-    Does not count endpoints as intersecting
+    Ignored endpoint intersections except with q
     http://stackoverflow.com/questions/563198/how-do-you-detect-where-two-line-segments-intersect
     """
     r = pr - p
@@ -275,7 +308,7 @@ def intersect(p, pr, q, qs):
 
     u = cross(q - p, r) / rxs
     t = cross(q - p, s) / rxs
-    if u <= 0 or u >= 1 or t <= 0 or t >= 1:
+    if u < 0 or u >= 1 or t <= 0 or t >= 1:
         return None
 
     return (t, p + t * r)
@@ -284,7 +317,7 @@ def intersect(p, pr, q, qs):
 def split_convex_poly(poly, a, b):
     """
     Split the given convex polygon with a line a->b
-    Returns two new polygons (ccw left, ccw right) from line
+    Returns two new polygons (left turn, right turn) from line
 
     If the line does not intersect, it returns tuple with polygon in correct
     ccw position and None in other position
@@ -295,16 +328,26 @@ def split_convex_poly(poly, a, b):
         if hit is not None:
             hits.append((i, hit[1], hit[0]))
     # At most 2 intersections for convex polygon and line
-    assert(len(hits) == 0 or len(hits) == 2)
-    if len(hits) == 0:
+    assert(len(hits) <= 2)
+    if len(hits) <= 1:
         if polygon_ccw(poly, a, b):
-            return poly, None
-        return None, poly
+            return None, poly
+        return poly, None
 
     l1, h1, t1 = hits[0]
     l2, h2, t2 = hits[1]
-    p1 = poly[l1 + 1:l2+1] + [h2, h1]
-    p2 = poly[l2 + 1:] + poly[:l1+1] + [h1, h2]
+    if poly[l2] == h2:
+        p1_new = [h1]
+    else:
+        p1_new = [h2, h1]
+
+    if poly[l1] == h1:
+        p2_new = [h2]
+    else:
+        p2_new = [h1, h2]
+
+    p1 = poly[l1 + 1:l2+1] + p1_new
+    p2 = poly[l2 + 1:] + poly[:l1+1] + p2_new
 
     # Determine which is left and right
     if t1 < t2:
