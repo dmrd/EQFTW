@@ -2,17 +2,30 @@ import math
 import numpy as np
 import matplotlib.pylab as plt
 from scipy.spatial import ConvexHull
+from itertools import chain
+
+EPSILON = 1e-10
+fig = plt.figure()
+ax = fig.add_subplot(111)
+ax.set_aspect('equal')
+
+def random_color():
+    return np.random.rand(3)
 
 
-def plot_poly(poly):
+def plot_poly(poly, color=random_color()):
     x, y = zip(*(poly + [poly[0]]))
-    plt.plot(x, y)
+    ax.fill(x, y, color=color)
+
 
 
 def plot_polys(polys):
     for poly in polys:
-        print(poly)
         plot_poly(poly)
+
+
+def plot_line(a, b):
+    plt.plot((a.x, b.x), (a.y, b.y))
 
 
 class Point(np.ndarray):
@@ -45,7 +58,19 @@ class Point(np.ndarray):
         return a == b or a < b
 
     def __repr__(self):
-        return str((self.x, self.y))
+        return "({:0.2f}, {:0.2f})".format(self.x, self.y)
+        #return str((self.x, self.y))
+
+    def plot(self):
+        plt.scatter(self.x, self.y)
+
+    def project(p, a, b):
+        """ Project point p onto the line a-b """
+        ab = b - a
+        ap = p - a
+        x = ((ap.x*ab.x + ap.y*ab.y) / float((ab.x*ab.x + ab.y*ab.y)) * ab.x)
+        y = ((ap.x*ab.x + ap.y*ab.y) / float((ab.x*ab.x + ab.y*ab.y)) * ab.y)
+        return a + Point(x, y)
 
     @property
     def x(self):
@@ -68,8 +93,8 @@ class Shape:
     def __repr__(self):
         return str(self.pieces)
 
-    def combine(self, other):
-        return Shape(self.pieces + other.pieces)
+    def combine(self, *others):
+        return merge_shapes(chain(others, [self]))
 
     def cut(self, a, b):
         """
@@ -113,29 +138,32 @@ class Shape:
                 max_x = max(max_x, point.x)
                 min_y = min(min_y, point.y)
                 max_y = max(max_y, point.y)
-        return make_poly([(min_x, min_y), (min_x, max_y), (max_x, max_y), (max_x, min_y)])
+        return (min_x, min_y, max_x, max_y)
 
     def hull(self):
         points = []
         for piece in self.pieces:
             points.extend(piece.poly)
         points = np.asarray(points)
-        return make_poly(points[ConvexHull(points).vertices])
+        return make_poly(reversed(points[ConvexHull(points).vertices]))
 
-    def plot(self):
+    def plot(self, shift=None):
         for piece in self.pieces:
-            piece.plot()
+            piece.plot(shift=shift)
 
     def original_position(self):
         return Shape([piece.original_position() for piece in self.pieces])
 
 
 class Piece:
-    def __init__(self, poly, transform=None):
+    def __init__(self, poly, transform=None, color=None):
         if transform is None:
             transform = identity_transform()
+        if color is None:
+            color = random_color()
         self.transform = transform
         self.poly = make_poly(poly)
+        self.color = color
 
     def __iter__(self):
         """ Iterate over points of the piece """
@@ -145,8 +173,12 @@ class Piece:
     def __repr__(self):
         return str(self.poly)
 
-    def plot(self):
-        return plot_poly(self.poly)
+    def plot(self, shift=None):
+        if shift is not None:
+            poly = [p + shift for p in self.poly]
+        else:
+            poly = self.poly
+        return plot_poly(poly, color=self.color)
 
     def translate(self, vector):
         self.apply_transform(translation_matrix(vector))
@@ -178,7 +210,19 @@ class Piece:
 
     def original_position(self):
         inverse = self.inverse_transform()
-        return Piece(make_poly(transform_point(p, inverse) for p in self.poly))
+        return Piece(make_poly(transform_point(p, inverse) for p in self.poly), color=self.color)
+
+
+def merge_shapes(shapes):
+    pieces = []
+    for shape in shapes:
+        if shape is not None:
+            pieces.extend(shape.pieces)
+    return Shape(pieces)
+
+
+def distance(a, b):
+    return np.linalg.norm(b - a)
 
 
 def transform_point(p, transform):
@@ -203,6 +247,12 @@ def identity_transform():
     return np.identity(3)
 
 
+def extend_line(a, b):
+    """ Extend a line past both its endpoints """
+    v = b - a
+    return (a - v), (b + v)
+
+
 def make_poly(points):
     return [Point(p) for p in points]
 
@@ -221,15 +271,6 @@ def length(v):
 
 def normalize(v):
     return v / length(v)
-
-
-def project(p, a, b):
-    """ Project point p onto the line a-b """
-    ab = b - a
-    ap = p - a
-    x = ((ap.x*ab.x + ap.y*ab.y) / (ab.x*ab.x + ab.y*ab.y)) * ab.x
-    y = ((ap.x*ab.x + ap.y*ab.y) / (ab.x*ab.x + ab.y*ab.y)) * ab.y
-    return Point([x, y]) + a
 
 
 def rotate_polygon(poly, pivot, degree):
@@ -336,12 +377,21 @@ def split_convex_poly(poly, a, b):
         if hit is not None:
             hits.append((i, hit[1], hit[0]))
     # At most 2 intersections for convex polygon and line
+    if len(hits) > 2:
+        # Numerical errors
+        for i in range(len(hits)):
+            if distance(hits[i][1], hits[(i+1) % len(hits)][1]) < EPSILON:
+                print("Numerical error in split")
+                del hits[i]
     assert(len(hits) <= 2)
+
+    # Polygon lies on one side of the line
     if len(hits) <= 1:
         if polygon_ccw(poly, a, b):
             return None, poly
         return poly, None
 
+    # Polygon split in two
     l1, h1, t1 = hits[0]
     l2, h2, t2 = hits[1]
     if poly[l2] == h2:
