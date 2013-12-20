@@ -5,9 +5,12 @@ from scipy.spatial import ConvexHull
 from itertools import chain
 
 EPSILON = 1e-10
+
+# Make all plots have square aspect ratio
 fig = plt.figure()
 ax = fig.add_subplot(111)
 ax.set_aspect('equal')
+
 
 def random_color():
     return np.random.rand(3)
@@ -16,7 +19,6 @@ def random_color():
 def plot_poly(poly, color=random_color()):
     x, y = zip(*(poly + [poly[0]]))
     ax.fill(x, y, color=color)
-
 
 
 def plot_polys(polys):
