@@ -1,6 +1,7 @@
 import math
 import numpy as np
 import matplotlib.pylab as plt
+from functools import total_ordering
 
 
 def plot_poly(poly):
@@ -16,8 +17,27 @@ def plot_polys(polys):
 
 class Point(np.ndarray):
     def __new__(self, vals):
+        assert(len(vals) == 2)
         obj = np.asarray(vals).view(self)
         return obj
+
+    def __eq__(a, b):
+        return a.x == b.x and a.y == b.y
+
+    def __ne__(a, b):
+        return a.x != b.x or a.y != b.y
+
+    def __lt__(a, b):
+        return (a.x, a.y) < (b.x, b.y)
+
+    def __gt__(a, b):
+        return not(a < b)
+
+    def __ge__(a, b):
+        return a == b or a > b
+
+    def __le__(a, b):
+        return a == b or a < b
 
     @property
     def x(self):
@@ -227,8 +247,13 @@ def ccw(a, b, c):
             return 2
 
 
-def polygon_side(poly, a, b):
-    pass
+def polygon_ccw(poly, a, b):
+    """
+    Returns True if polygon is right turn from a->b, False otherwise
+
+    Assumes no intersections (except at endpoints)
+    """
+    return all(ccw(a, b, p) >= 0 for p in poly)
 
 
 def intersect(p, pr, q, qs):
@@ -258,19 +283,31 @@ def intersect(p, pr, q, qs):
 
 def split_convex_poly(poly, a, b):
     """
-    Split the given convex polygon with a line a-b
-    Returns two new polygons
+    Split the given convex polygon with a line a->b
+    Returns two new polygons (ccw left, ccw right) from line
+
+    If the line does not intersect, it returns tuple with polygon in correct
+    ccw position and None in other position
     """
     hits = []
     for i in range(len(poly)):
         hit = intersect(a, b, poly[i], poly[(i+1) % len(poly)])
         if hit is not None:
-            hits.append((i, hit[1]))
+            hits.append((i, hit[1], hit[0]))
     # At most 2 intersections for convex polygon and line
-    print(hits)
     assert(len(hits) == 0 or len(hits) == 2)
-    l1 = hits[0][0]
-    l2 = hits[1][0]
-    s1 = poly[l1 + 1:l2+1] + [hits[1][1], hits[0][1]]
-    s2 = poly[l2 + 1:] + poly[:l1+1] + [hits[0][1], hits[1][1]]
-    return (s1, s2)
+    if len(hits) == 0:
+        if polygon_ccw(poly, a, b):
+            return poly, None
+        return None, poly
+
+    l1, h1, t1 = hits[0]
+    l2, h2, t2 = hits[1]
+    p1 = poly[l1 + 1:l2+1] + [h2, h1]
+    p2 = poly[l2 + 1:] + poly[:l1+1] + [h1, h2]
+
+    # Determine which is left and right
+    if t1 < t2:
+        return p1, p2
+    else:
+        return p2, p1
