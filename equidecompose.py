@@ -55,10 +55,6 @@ tri = make_poly([(-1, 0), (0, 5), (1, 0)])
 tri_shape = Shape([Piece(tri)])
 square_shape = Shape([Piece(square)])
 
-tri_cut = merge_shapes(tri_shape.cut(Point(0, -3), Point(1, 6)))
-#print(tri_cut)
-tri_cut = merge_shapes(tri_cut.cut(Point(-2, 1), Point(7, -2)))
-
 
 def random_point(low, high):
     r = np.random.randint
@@ -69,12 +65,12 @@ def random_points(n, low, high):
     return [random_point(low, high) for i in range(n)]
 
 
-def random_triangle(m, low=0, high=100):
-    return Shape(Piece(random_points(3, low, high)))
+def random_triangle(low=0, high=100):
+    return Shape([Piece(random_points(3, low, high))])
 
 
 def random_cut_shape(shape):
     lx, ly, hx, hy = shape.bbox()
-    x = np.random.randint(lx, hx)
-    x2 = np.random.randint(lx, hx)
-    return merge_shapes(shape.cut(extend_line(Point(x, ly), Point(x2, hy))))
+    x1, x2 = lx + np.random.rand(2) * (hx - lx)
+    start, end = extend_line(Point(x1, ly), Point(x2, hy))
+    return merge_shapes(shape.cut(start, end))
