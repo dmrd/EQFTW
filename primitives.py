@@ -6,6 +6,7 @@ from itertools import chain
 
 EPSILON = 1e-10
 
+
 def random_color():
     return np.random.rand(3)
 
@@ -34,7 +35,8 @@ class Point(np.ndarray):
     def __new__(self, x, y=None):
         """ Point(x, y) or Point([x, y]) """
         if y is None:
-            assert(len(x) == 2)
+            if len(x) != 2:
+                raise Exception("Point must have exactly x, y coordinates")
             vals = x
         else:
             vals = [x, y]
@@ -42,10 +44,10 @@ class Point(np.ndarray):
         return obj
 
     def __eq__(a, b):
-        return a.x == b.x and a.y == b.y
+        return distance(a, b) < EPSILON
 
     def __ne__(a, b):
-        return a.x != b.x or a.y != b.y
+        return not(a == b)
 
     def __lt__(a, b):
         return (a.x, a.y) < (b.x, b.y)
@@ -60,8 +62,11 @@ class Point(np.ndarray):
         return a == b or a < b
 
     def __repr__(self):
-        return "({:0.2f}, {:0.2f})".format(self.x, self.y)
-        #return str((self.x, self.y))
+        #return "({:0.2f}, {:0.2f})".format(self.x, self.y)
+        return str((self.x, self.y))
+
+    def __hash__(self):
+        return (self.x, self.y).__hash__()
 
     def plot(self):
         plt.scatter(self.x, self.y)
@@ -147,7 +152,7 @@ class Shape:
         for piece in self.pieces:
             points.extend(piece.poly)
         points = np.asarray(points)
-        return make_poly(reversed(points[ConvexHull(points).vertices]))
+        return make_poly(list(reversed(points[ConvexHull(points).vertices])))
 
     def plot(self, shift=None):
         for piece in self.pieces:
@@ -166,6 +171,28 @@ class Piece:
         self.transform = transform
         self.poly = make_poly(poly)
         self.color = color
+
+        if len(self.poly) <= 2:
+            print(self.poly)
+            raise Exception("Polygon must have at least 3 points")
+
+        # Hull is convex
+        if not(self.check_cw()):
+            self.poly.reverse()
+            if not(self.check_cw()):
+                print(self)
+                self.plot()
+                show()
+                raise Exception("Polygon not given in consistent cw order")
+
+    def check_cw(self):
+        """ Check that all turns are cw """
+        p = self.poly
+        l = len(p)
+        for i in range(l):
+            if not(ccw(p[i], p[(i + 1) % l], p[(i + 2) % l]) == 1):
+                return False
+        return True
 
     def __iter__(self):
         """ Iterate over points of the piece """
@@ -204,15 +231,21 @@ class Piece:
         if result is None:
             return self
 
+        p1 = p2 = None
         # Split pieces have same transform so far
-        p1 = result[0] and Piece(result[0], self.transform)
-        p2 = result[1] and Piece(result[1], self.transform)
-
+        if result[0]:
+            poly1 = make_poly(result[0])
+            if len(poly1) >= 3:
+                p1 = Piece(poly1, self.transform)
+        if result[1]:
+            poly2 = make_poly(result[1])
+            if len(poly2) >= 3:
+                p2 = Piece(poly2, self.transform)
         return p1, p2
 
     def original_position(self):
         inverse = self.inverse_transform()
-        return Piece(make_poly(transform_point(p, inverse) for p in self.poly), color=self.color)
+        return Piece(make_poly([transform_point(p, inverse) for p in self.poly]), color=self.color)
 
 
 def merge_shapes(shapes):
@@ -256,7 +289,16 @@ def extend_line(a, b):
 
 
 def make_poly(points):
-    return [Point(p) for p in points]
+    if len(points) == 0:
+        return points
+    poly = [Point(points[0])]
+    for p in points[1:]:
+        p = Point(p)
+        if p != poly[-1]:
+            poly.append(p)
+    if len(poly) > 1 and poly[0] == poly[-1]:
+        del poly[-1]
+    return poly
 
 
 def dot(a, b):
@@ -294,41 +336,23 @@ def tri_area(a, b, c):
 
 def ccw(a, b, c):
     """
-    Check if a,b are same point but c could be different
-    Behavior unspecified when b == c and a != b, so
-    using -2 since it is opposite of a == b != c.
+    Return ccw of three points.  Has some error tolerance for collinear points
     """
     if a == b == c:
         return 0
-    elif a == b != c:
-        return 2
-    elif a != b == c:
-        return -2
+    elif a == b != c or a != b == c:
+        raise Exception("Duplicate points in ccw")
 
     # Cross product
     cross = tri_area(a, b, c)
-    if cross > 0:
+    if abs(cross) < EPSILON:
+        return 0
+    elif cross > 0:
         # Left turn
         return -1
     elif cross < 0:
         # Right turn
         return 1
-    else:
-        # When sorted by (x,y) coordinates, the point in the middle
-        # geometrically will always be in the middle of the list
-        # Sorintg 3 numbers considered constant time
-        s = sorted([a, b, c])
-        if s[1] is c:
-            # a -- c -- b
-            # b -- c -- a
-            return 0
-        elif s[1] is a:
-            # b -- a -- c
-            # c -- a -- b
-            return -2
-        else:
-            # a -- b -- c
-            return 2
 
 
 def polygon_ccw(poly, a, b):
@@ -364,6 +388,8 @@ def intersect(p, pr, q, qs):
 
     return (t, p + t * r)
 
+# CHANGE INTERSECT TO RETURN BOTH PARAMETRIC VALUES< LET SPLIT_CONVEX_POLY DECIDE WHICH TO TAKE
+
 
 def split_convex_poly(poly, a, b):
     """
@@ -378,14 +404,19 @@ def split_convex_poly(poly, a, b):
         hit = intersect(a, b, poly[i], poly[(i+1) % len(poly)])
         if hit is not None:
             hits.append((i, hit[1], hit[0]))
+
+    print(hits)
     # At most 2 intersections for convex polygon and line
-    if len(hits) > 2:
-        # Numerical errors
+    if len(hits) >= 2:
+        # Handle numerical errors where same point is found multiple times
         for i in range(len(hits)):
             if distance(hits[i][1], hits[(i+1) % len(hits)][1]) < EPSILON:
                 print("Numerical error in split")
                 del hits[i]
-    assert(len(hits) <= 2)
+                break
+
+    if len(hits) > 2:
+        raise Exception("More than 2 line-polygon intersections")
 
     # Polygon lies on one side of the line
     if len(hits) <= 1:

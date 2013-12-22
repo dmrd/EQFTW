@@ -4,7 +4,11 @@ from primitives import *
 
 def tri2rect(shape):
     hull = shape.hull()
-    assert(len(hull) == 3)
+    if len(hull) != 3:
+        shape.plot()
+        show()
+        print(hull)
+        raise Exception("Input shape must be a triangle")
 
     # Midpoint along 2 edges
     h1 = (hull[0] + hull[1]) / 2.0
@@ -24,26 +28,57 @@ def tri2rect(shape):
     return bottom.combine(tl, tr)
 
 
-def rect2square(poly):
-    assert(len(poly) == 4)
-    t1 = length(poly[1] - poly[0])
-    t2 = length(poly[2] - poly[1])
-    s1 = max(t1, t2)
-    s2 = min(t1, t2)
-    # Work on axis aligned rectangle
-    np = make_poly([[0, 0], [0, s2], [s1, s2], [s1, 0]])
-    area = s1 * s2
-    s_side = math.sqrt(area)
+def tridebug(shape):
+    hull = shape.hull()
+    if len(hull) != 3:
+        shape.plot()
+        show()
+        print(hull)
+        raise Exception("Input shape must be a triangle")
+    # Midpoint along 2 edges
+    h1 = (hull[0] + hull[1]) / 2.0
+    h2 = (hull[2] + hull[1]) / 2.0
+    c1, c2 = extend_line(h1, h2)
+    top, bottom = shape.cut(c1, c2)
+    mid = hull[1].project(h1, h2)
+    v_bottom, v_top = extend_line(mid, hull[1])
+    tl, tr = top.cut(v_bottom, v_top)
+    #if tl is not None:
+        #tl.rotate(h1, math.pi)
+    #if tr is not None:
+        #tr.rotate(h2, -math.pi)
+    return {"result": bottom.combine(tl, tr),
+            "bottom": bottom,
+            "top": top,
+            "tl": tl,
+            "tr": tr,
+            "v_bottom": v_bottom,
+            "v_top": v_top}
 
-    if max(s1, s2) > 2 * s_side:
-        # split in two and stack
-        s1 /= 2.0
-        s2 *= 2.0
-        np = make_poly([[0, 0], [0, s2], [s1, s2], [s1, 0]])
+
+def rect2square(shape):
+    hull = shape.hull()
+    if len(hull) != 4:
+        raise Exception("Input shape must be a rectangle")
+    #t1 = length(poly[1] - poly[0])
+    #t2 = length(poly[2] - poly[1])
+    #s1 = max(t1, t2)
+    #s2 = min(t1, t2)
+    ## Work on axis aligned rectangle
+    #np = make_poly([[0, 0], [0, s2], [s1, s2], [s1, 0]])
+    #area = s1 * s2
+    #s_side = math.sqrt(area)
+
+    #if max(s1, s2) > 2 * s_side:
+    #    # split in two and stack
+    #    s1 /= 2.0
+    #    s2 *= 2.0
+    #    np = make_poly([[0, 0], [0, s2], [s1, s2], [s1, 0]])
 
 
 def combine_squares(squares):
-    assert(all(len(poly) == 4 for poly in squares))
+    if any(len(poly) != 4 for poly in squares):
+        raise Exception("All input shapes must be squares")
     pass
 
 
@@ -66,7 +101,11 @@ def random_points(n, low, high):
 
 
 def random_triangle(low=0, high=100):
-    return Shape([Piece(random_points(3, low, high))])
+    p1, p2, p3 = random_points(3, low, high)
+    while p1.x == p2.x == p3.x or p1.y == p2.y == p3.y:
+        p1, p2, p3 = random_points(3, low, high)
+
+    return Shape([Piece([p1, p2, p3])])
 
 
 def random_cut_shape(shape):
