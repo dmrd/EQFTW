@@ -102,7 +102,7 @@ def random_points(n, low, high):
 
 def random_triangle(low=0, high=100):
     p1, p2, p3 = random_points(3, low, high)
-    while p1.x == p2.x == p3.x or p1.y == p2.y == p3.y:
+    while ccw(p1, p2, p3) == 0:
         p1, p2, p3 = random_points(3, low, high)
 
     return Shape([Piece([p1, p2, p3])])

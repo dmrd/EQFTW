@@ -367,9 +367,8 @@ def polygon_ccw(poly, a, b):
 def intersect(p, pr, q, qs):
     """
     Intersect two lines specified by endpoints (p, pe) and (q, qe).
-    Returns a tuple of (parametric distance along p-pr, intersection point)
+    Returns (intersection point, parametric p-pe, parametric q-qe)
 
-    Ignored endpoint intersections except with q
     http://stackoverflow.com/questions/563198/how-do-you-detect-where-two-line-segments-intersect
     """
     r = pr - p
@@ -383,12 +382,10 @@ def intersect(p, pr, q, qs):
 
     u = cross(q - p, r) / rxs
     t = cross(q - p, s) / rxs
-    if u < 0 or u >= 1 or t <= 0 or t >= 1:
+    if u < -EPSILON or u > (1 + EPSILON) or t < -EPSILON or t > (1 + EPSILON):
         return None
 
-    return (t, p + t * r)
-
-# CHANGE INTERSECT TO RETURN BOTH PARAMETRIC VALUES< LET SPLIT_CONVEX_POLY DECIDE WHICH TO TAKE
+    return (p + t * r, t, u)
 
 
 def split_convex_poly(poly, a, b):
@@ -403,9 +400,14 @@ def split_convex_poly(poly, a, b):
     for i in range(len(poly)):
         hit = intersect(a, b, poly[i], poly[(i+1) % len(poly)])
         if hit is not None:
-            hits.append((i, hit[1], hit[0]))
+            loc, line_par, edge_par = hit
+            if abs(edge_par) < EPSILON:
+                # Reduce numerical errors when line goes through point
+                hits.append((i, poly[i], line_par))
+            # Don't consider intersection at end of edge
+            elif distance(loc, poly[(i+1) % len(poly)]) > EPSILON:
+                hits.append((i, loc, line_par))
 
-    print(hits)
     # At most 2 intersections for convex polygon and line
     if len(hits) >= 2:
         # Handle numerical errors where same point is found multiple times
@@ -440,7 +442,7 @@ def split_convex_poly(poly, a, b):
     p1 = poly[l1 + 1:l2+1] + p1_new
     p2 = poly[l2 + 1:] + poly[:l1+1] + p2_new
 
-    # Determine which is left and right
+    # Determine which hit was first and which part is on which side
     if t1 < t2:
         return p1, p2
     else:
