@@ -236,11 +236,16 @@ class Piece:
         if result[0]:
             poly1 = make_poly(result[0])
             if len(poly1) >= 3:
-                p1 = Piece(poly1, self.transform)
+                p1 = Piece(poly1, self.transform, color=self.color)
         if result[1]:
             poly2 = make_poly(result[1])
+            # Want one piece to keep same color
+            if result[0]:
+                set_color = None
+            else:
+                set_color = self.color
             if len(poly2) >= 3:
-                p2 = Piece(poly2, self.transform)
+                p2 = Piece(poly2, self.transform, color=set_color)
         return p1, p2
 
     def original_position(self):
