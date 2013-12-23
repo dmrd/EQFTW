@@ -28,32 +28,14 @@ def tri2rect(shape):
     return bottom.combine(tl, tr)
 
 
-def tridebug(shape):
+def axis_align(shape):
     hull = shape.hull()
-    if len(hull) != 3:
-        shape.plot()
-        show()
-        print(hull)
-        raise Exception("Input shape must be a triangle")
-    # Midpoint along 2 edges
-    h1 = (hull[0] + hull[1]) / 2.0
-    h2 = (hull[2] + hull[1]) / 2.0
-    c1, c2 = extend_line(h1, h2)
-    top, bottom = shape.cut(c1, c2)
-    mid = hull[1].project(h1, h2)
-    v_bottom, v_top = extend_line(mid, hull[1])
-    tl, tr = top.cut(v_bottom, v_top)
-    #if tl is not None:
-        #tl.rotate(h1, math.pi)
-    #if tr is not None:
-        #tr.rotate(h2, -math.pi)
-    return {"result": bottom.combine(tl, tr),
-            "bottom": bottom,
-            "top": top,
-            "tl": tl,
-            "tr": tr,
-            "v_bottom": v_bottom,
-            "v_top": v_top}
+    assert(len(hull) == 4)
+
+    angle = vector_angle((hull[1] - hull[0]), Point(1, 0))
+    shape.rotate(hull[0], -angle)
+    mx, my, _, _ = shape.bbox()
+    shape.translate(Point(-mx, -my))
 
 
 def rect2square(shape):

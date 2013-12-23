@@ -322,17 +322,8 @@ def normalize(v):
     return v / length(v)
 
 
-def rotate_polygon(poly, pivot, degree):
-    """ Rotates given polygon around the pivot """
-    r = math.radians(degree)
-    new_positions = []
-    for p in poly:
-        p = p - pivot  # Make pivot origin
-
-        pos = Point((math.cos(r) * p[0] + math.sin(r) * p[1],
-                     math.cos(r) * p[1] - math.sin(r) * p[0]))
-        new_positions.append(pos + pivot)
-    return new_positions
+def vector_angle(a, b):
+    return np.arctan2(b.y, b.x) - np.arctan2(a.y, a.x)
 
 
 def tri_area(a, b, c):
