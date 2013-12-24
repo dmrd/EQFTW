@@ -14,10 +14,14 @@ def random_color():
 def show():
     # Make all plots have square aspect ratio
     plt.axis('equal')
+    # Make high quality
+    fig = plt.gcf()
+    fig.set_size_inches(18.5, 10.5)
     plt.show()
 
 
 def plot_poly(poly, color=random_color()):
+    plt.axis('equal')
     x, y = zip(*(poly + [poly[0]]))
     plt.fill(x, y, color=color)
 
@@ -91,6 +95,7 @@ class Point(np.ndarray):
 class Shape:
     def __init__(self, pieces):
         self.pieces = pieces
+        self.saved_hull = None
 
     def __iter__(self):
         """ Iterate over pieces of the shape """
@@ -122,16 +127,19 @@ class Shape:
         """ Rotate shape around pivot"""
         for piece in self.pieces:
             piece.rotate(pivot, angle)
+        self.saved_hull = None  # Reset hull
 
     def translate(self, vector):
         """ Move all points by given vector"""
         for piece in self.pieces:
             piece.translate(vector)
+        self.saved_hull = None  # Reset hull
 
     def apply_transform(self, transform):
         """ Apply the given transform to all pieces """
         for piece in self.pieces:
             piece.apply_transform(transform)
+        self.saved_hull = None  # Reset hull
 
     def bbox(self):
         min_x = float('inf')
@@ -148,11 +156,14 @@ class Shape:
         return (min_x, min_y, max_x, max_y)
 
     def hull(self):
-        points = []
-        for piece in self.pieces:
-            points.extend(piece.poly)
-        points = np.asarray(points)
-        return make_poly(list(reversed(points[ConvexHull(points).vertices])))
+        if self.saved_hull is None:
+            points = []
+            for piece in self.pieces:
+                points.extend(piece.poly)
+            points = np.asarray(points)
+            self.saved_hull = make_poly(list(reversed(points[ConvexHull(points).vertices])))
+
+        return self.saved_hull
 
     def plot(self, shift=None):
         for piece in self.pieces:
@@ -226,6 +237,9 @@ class Piece:
     def inverse_transform(self):
         return np.linalg.inv(self.transform)
 
+    def area(self):
+        pass
+
     def cut(self, a, b):
         result = split_convex_poly(self.poly, a, b)
         if result is None:
@@ -251,6 +265,14 @@ class Piece:
     def original_position(self):
         inverse = self.inverse_transform()
         return Piece(make_poly([transform_point(p, inverse) for p in self.poly]), color=self.color)
+
+
+def longest_edge(poly):
+    """ Returns start index """
+    m = (float('-inf'), None)
+    for i in range(len(poly)):
+        m = max(m, (length(poly[(i+1) % len(poly)] - poly[i]), i))
+    return m[1]
 
 
 def merge_shapes(shapes):
