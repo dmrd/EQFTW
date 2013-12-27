@@ -328,6 +328,11 @@ def make_poly(points):
     return poly
 
 
+def make_shape(points):
+    poly = make_poly(points)
+    return Shape([Piece(poly)])
+
+
 def dot(a, b):
     return sum(a * b)
 

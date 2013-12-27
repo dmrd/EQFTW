@@ -1,4 +1,5 @@
 import math
+from collections import deque
 from primitives import *
 
 
@@ -84,13 +85,10 @@ def rect2square(shape, plot=False):
     upper_tri, bottom = shape.cut(diag_begin, diag_end)
     bottom, lower_tri = bottom.cut(split_begin, split_end)
 
-    if show is True:
-        plot_line(diag_begin, diag_end)
-        plot_line(split_begin, split_end)
+    if plot is True:
         bottom.plot((-1, 0))
         upper_tri.plot((0, 1))
         lower_tri.plot((1, -1))
-        show()
 
     # Put lower tri in proper place
     lt_lx, lt_ly, _, _ = lower_tri.bbox()
@@ -100,25 +98,117 @@ def rect2square(shape, plot=False):
     ut_lx, _, _, ut_hy = upper_tri.bbox()
     upper_tri.translate(Point(-ut_lx, sides - ut_hy))
 
-    if show is True:
-        plot_line(diag_begin, diag_end)
-        plot_line(split_begin, split_end)
-        bottom.plot((-1, 0))
-        upper_tri.plot((0, 1))
-        lower_tri.plot((1, -1))
+    result = merge_shapes([bottom, lower_tri, upper_tri])
+
+    if plot is True:
+        result.plot((sides * 2, 0))
         show()
 
-    return merge_shapes([bottom, lower_tri, upper_tri])
+    return result
+
+
+def combine_two_squares(a, b, show=False):
+    """
+    Takes two axis aligned squares, with lower left corners at (0, 0).
+    Returns a single square composed of their pieces
+    """
+    #assert(len(a.hull()) == 4)
+    #assert(len(b.hull()) == 4)
+    #axis_align(a)
+    #axis_align(b)
+
+    _, _, ax, ay = a.bbox()
+    _, _, bx, by = b.bbox()
+
+    aa = ax * ay
+    ba = bx * by
+
+    if aa > ba:
+        larger = a
+        lx, ly = ax, ay
+        smaller = b
+        sx, sy = bx, by
+    else:
+        larger = b
+        lx, ly = bx, by
+        smaller = a
+        sx, sy = ax, ay
+
+    # Stack smaller on top right of large square
+    smaller.translate(Point(lx - sx, ly))
+
+    st = Point(lx, sy)  # Vector representing top and bottom of new square
+    ss = Point(sy,  -lx)  # Vector representing sides of new square
+
+    # All cuts go down or to right
+    s1_s, s1_e = Point(0, ly), Point(lx, sy + ly)  # top
+    s2_s, s2_e = Point(0, ly), Point(0, ly) + ss  # left
+    s3_s, s3_e = Point(lx, ly + sy), Point(lx, ly + sy) + ss  # right
+    s4_s, s4_e = s2_e, s3_e  # bottom
+    c1_s, c1_e = extend_line(s1_s, s1_e)
+    c2_s, c2_e = extend_line(s2_s, s2_e)
+    c3_s, c3_e = extend_line(s3_s, s3_e)
+    c4_s, c4_e = extend_line(s4_s, s4_e)
+
+    small_top, small_bot = smaller.cut(c1_s, c1_e)
+    large_inner, large_t1 = larger.cut(c2_s, c2_e)
+    large_inner, large_t2 = large_inner.cut(c4_s, c4_e)
+
+    if show:
+        #smaller.plot()
+        #larger.plot()
+        small_top.plot()
+        small_bot.plot()
+        large_t1.plot()
+        large_t2.plot()
+        large_inner.plot()
+        plot_line(s1_s, s1_e)
+        plot_line(s2_s, s2_e)
+        plot_line(s3_s, s3_e)
+        plot_line(s4_s, s4_e)
+
+    large_t1.translate(Point(lx, sy))
+
+    x, _, _, _ = large_t2.bbox()
+    large_t2.translate(Point(-x, ly))
+
+    small_top.translate(s3_e - Point(lx, sy + ly))
+
+    result = merge_shapes([small_top, small_bot, large_t1, large_t2, large_inner])
+
+    axis_align(result)
+
+    if show:
+        result.plot((2*lx, 0))
+
+    return result
 
 
 def combine_squares(squares):
-    if any(len(poly) != 4 for poly in squares):
+    if any(len(shape.hull()) != 4 for shape in squares):
         raise Exception("All input shapes must be squares")
-    pass
+    q = deque(squares)
+
+    # Combine in pairs of two
+    while len(q) > 1:
+        s1 = q.popleft()
+        s2 = q.popleft()
+        r = combine_two_squares(s1, s2)
+        q.append(r)
+
+    return q.popleft()
 
 
 def triangulate(poly):
+    """ Takes a polygon and returns a shape representing it with triangular pieces"""
     pass
+
+
+def equidecompose_to_square(polygon):
+    triangulated = triangulate(polygon)
+    triangulated_shapes = [Shape(piece) for piece in triangulated.pieces]
+    pass
+
 
 square = make_poly([(0, 0), (0, 1), (1, 1), (1, 0)])
 tri = make_poly([(-1, 0), (0, 5), (1, 0)])
@@ -141,6 +231,11 @@ def random_triangle(low=0, high=100):
         p1, p2, p3 = random_points(3, low, high)
 
     return Shape([Piece([p1, p2, p3])])
+
+
+def random_square(low=1, high=100):
+    s = np.random.randint(low, high)
+    return make_shape([(0, 0), (0, s), (s, s), (s, 0)])
 
 
 def random_cut_shape(shape):
