@@ -1,4 +1,5 @@
 import math
+from scipy.spatial import Delaunay, ConvexHull
 from collections import deque
 from primitives import *
 
@@ -200,14 +201,31 @@ def combine_squares(squares):
 
 
 def triangulate(poly):
-    """ Takes a polygon and returns a shape representing it with triangular pieces"""
-    pass
+    """
+    Takes a polygon and returns a shape representing it with triangular pieces
+    For now just returns the delaunay triangulation for testing (until I get
+    a real triangulation library)
+    """
+    points = np.array(poly)
+    points = points[ConvexHull(points).vertices]
+    triangles = Delaunay(points).simplices
+    pieces = []
+    for triangle in triangles:
+        pieces.append(Piece(make_poly(points[triangle])))
+    return Shape(pieces)
 
 
 def equidecompose_to_square(polygon):
     triangulated = triangulate(polygon)
-    triangulated_shapes = [Shape(piece) for piece in triangulated.pieces]
-    pass
+    triangulated_shapes = [Shape([piece]) for piece in triangulated.pieces]
+
+    squares = []
+    for triangle in triangulated_shapes:
+        rect = tri2rect(triangle)
+        squares.append(rect2square(rect))
+
+    square = combine_squares(squares)
+    return triangulated, square
 
 
 square = make_poly([(0, 0), (0, 1), (1, 1), (1, 0)])
@@ -243,3 +261,13 @@ def random_cut_shape(shape):
     x1, x2 = lx + np.random.rand(2) * (hx - lx)
     start, end = extend_line(Point(x1, ly), Point(x2, hy))
     return merge_shapes(shape.cut(start, end))
+
+
+def random_example(n):
+    triangulated, r = equidecompose_to_square(random_points(n, 0, 50))
+    orig = r.original_position()
+    r.plot()
+    _, _, hx, _ = r.bbox()
+    lx, ly, _, _ = orig.bbox()
+    r.original_position().plot((hx - lx + 1, -ly))
+    show()

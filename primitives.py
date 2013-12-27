@@ -11,12 +11,12 @@ def random_color():
     return np.random.rand(3)
 
 
-def show():
+def show(size=(12, 12)):
     # Make all plots have square aspect ratio
     plt.axis('equal')
     # Make high quality
     fig = plt.gcf()
-    fig.set_size_inches(18.5, 10.5)
+    fig.set_size_inches(*size)
     plt.show()
 
 
