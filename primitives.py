@@ -95,7 +95,8 @@ class Point(np.ndarray):
 class Shape:
     def __init__(self, pieces):
         self.pieces = pieces
-        self.saved_hull = None
+        self._bbox = None
+        self._hull = None
 
     def __iter__(self):
         """ Iterate over pieces of the shape """
@@ -125,56 +126,75 @@ class Shape:
 
     def rotate(self, pivot, angle):
         """ Rotate shape around pivot"""
+        pieces = []
         for piece in self.pieces:
-            piece.rotate(pivot, angle)
-        self.saved_hull = None  # Reset hull
+            pieces.append(piece.rotate(pivot, angle))
+        return Shape(pieces)
 
     def translate(self, vector):
         """ Move all points by given vector"""
+        pieces = []
         for piece in self.pieces:
-            piece.translate(vector)
-        self.saved_hull = None  # Reset hull
+            pieces.append(piece.translate(vector))
+        return Shape(pieces)
 
     def apply_transform(self, transform):
         """ Apply the given transform to all pieces """
+        pieces = []
         for piece in self.pieces:
-            piece.apply_transform(transform)
-        self.saved_hull = None  # Reset hull
+            pieces.append(piece.apply_transform(transform))
+        return Shape(pieces)
+
+    def inverse(self, percent):
+        return Shape([p.inverse(percent) for p in self.pieces])
+
+    def copy(self):
+        return Shape(self.pieces)
 
     def bbox(self):
+        if self._bbox:
+            return self._bbox
+
         min_x = float('inf')
         min_y = min_x
         max_x = float('-inf')
         max_y = max_x
 
         for piece in self.pieces:
-            for point in piece:
-                min_x = min(min_x, point.x)
-                max_x = max(max_x, point.x)
-                min_y = min(min_y, point.y)
-                max_y = max(max_y, point.y)
-        return (min_x, min_y, max_x, max_y)
+            pbbox = piece.bbox()
+            min_x = min(min_x, pbbox[0])
+            min_y = min(min_y, pbbox[1])
+            max_x = max(max_x, pbbox[2])
+            max_y = max(max_y, pbbox[3])
+        self._bbox = (min_x, min_y, max_x, max_y)
+        return self._bbox
 
     def hull(self):
-        if self.saved_hull is None:
-            points = []
-            for piece in self.pieces:
-                points.extend(piece.poly)
-            points = np.asarray(points)
-            self.saved_hull = make_poly(list(reversed(points[ConvexHull(points).vertices])))
+        if self._hull:
+            return self._hull
 
-        return self.saved_hull
+        points = []
+        for piece in self.pieces:
+            points.extend(piece.poly)
+        points = np.asarray(points)
+        self._hull = make_poly(list(reversed(points[ConvexHull(points).vertices])))
+        return self._hull
 
     def plot(self, shift=None):
         for piece in self.pieces:
             piece.plot(shift=shift)
 
     def original_position(self):
-        return Shape([piece.original_position() for piece in self.pieces])
+        return self.inverse(1)
+
+    def animate(self, parts):
+        for i in range(parts):
+            m = (i + 1.0) / parts
+            self.inverse(m).plot()
 
 
 class Piece:
-    def __init__(self, poly, transform=None, color=None):
+    def __init__(self, poly, transform=None, color=None, ccw_check=True):
         if transform is None:
             transform = identity_transform()
         if color is None:
@@ -183,12 +203,15 @@ class Piece:
         self.poly = make_poly(poly)
         self.color = color
 
+        self._bbox = None
+        self._hull = None
+
         if len(self.poly) <= 2:
             print(self.poly)
             raise Exception("Polygon must have at least 3 points")
 
         # Hull is convex
-        if not(self.check_cw()):
+        if ccw_check and not(self.check_cw()):
             self.poly.reverse()
             if not(self.check_cw()):
                 print(self)
@@ -213,6 +236,23 @@ class Piece:
     def __repr__(self):
         return str(self.poly)
 
+    def bbox(self):
+        if self._bbox:
+            return self._bbox
+
+        min_x = float('inf')
+        min_y = min_x
+        max_x = float('-inf')
+        max_y = max_x
+
+        for point in self.poly:
+            min_x = min(min_x, point.x)
+            min_y = min(min_y, point.y)
+            max_x = max(max_x, point.x)
+            max_y = max(max_y, point.y)
+        self._bbox = (min_x, min_y, max_x, max_y)
+        return self._bbox
+
     def plot(self, shift=None):
         if shift is not None:
             poly = [p + shift for p in self.poly]
@@ -221,21 +261,33 @@ class Piece:
         return plot_poly(poly, color=self.color)
 
     def translate(self, vector):
-        self.apply_transform(translation_matrix(vector))
+        return self.apply_transform(translation_matrix(vector))
 
     def rotate(self, pivot, radians):
         center = translation_matrix(-pivot)
         rotate = rotation_matrix(radians)
         uncenter = translation_matrix(pivot)
-        self.apply_transform(np.dot(np.dot(uncenter, rotate), center))
+        return self.apply_transform(np.dot(np.dot(uncenter, rotate), center))
 
     def apply_transform(self, transform):
-        self.transform = np.dot(transform, self.transform)
-        for i, point in enumerate(self.poly):
-            self.poly[i] = transform_point(point, transform)
+        result = np.dot(transform, self.transform)
+        poly = []
+        for point in self.poly:
+            poly.append(transform_point(point, transform))
+        return Piece(poly, transform=result, ccw_check=False)
 
-    def inverse_transform(self):
-        return np.linalg.inv(self.transform)
+    def inverse(self, percent):
+        inverse = np.linalg.inv(self.transform)
+        translation = inverse[0:2, 2]
+        angle = np.arctan(inverse[0, 1] / inverse[0, 0])
+        print("\nTransform: {}".format(percent))
+        print(angle)
+        print(inverse)
+        #print(np.dot(translation_matrix(translation * percent), rotation_matrix(angle * percent)))
+        res = self.apply_transform(
+            np.dot(translation_matrix(translation * percent),
+                   rotation_matrix(angle * percent)))
+        return res
 
     def area(self):
         pass
@@ -263,8 +315,7 @@ class Piece:
         return p1, p2
 
     def original_position(self):
-        inverse = self.inverse_transform()
-        return Piece(make_poly([transform_point(p, inverse) for p in self.poly]), color=self.color)
+        return self.inverse(1)
 
 
 def longest_edge(poly):
@@ -303,6 +354,16 @@ def rotation_matrix(radians):
     return np.array([[ca, sa, 0],
                      [-sa, ca, 0],
                      [0, 0, 1]])
+
+
+def partially_apply(matrix, percent):
+    translation = matrix[0:2, 2]
+    angle = np.arctan(matrix[0, 1] / matrix[0, 0])
+    print(matrix)
+    print(translation)
+    print(angle)
+    print(translation_matrix(translation * percent))
+    return np.dot(translation_matrix(translation * percent), rotation_matrix(angle * percent))
 
 
 def identity_transform():

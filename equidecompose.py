@@ -26,9 +26,9 @@ def tri2rect(shape, plot=False):
     tl, tr = top.cut(v_bottom, v_top)
 
     if tl is not None:
-        tl.rotate(h1, math.pi)
+        tl = tl.rotate(h1, math.pi)
     if tr is not None:
-        tr.rotate(h2, -math.pi)
+        tr = tr.rotate(h2, -math.pi)
 
     if plot:
         hull[i].plot()
@@ -49,14 +49,14 @@ def axis_align(shape):
     angle = vector_angle((hull[(i+1) % len(hull)] - hull[i]), Point(1, 0))
     shape.rotate(hull[i], -angle)
     mx, my, _, _ = shape.bbox()
-    shape.translate(Point(-mx, -my))
+    return shape.translate(Point(-mx, -my))
 
 
 def rect2square(shape, plot=False):
     hull = shape.hull()
     if len(hull) != 4:
         raise Exception("Input shape must be a rectangle")
-    axis_align(shape)
+    return axis_align(shape)
 
     # From here on, assume it is axis aligned and operate on bbox instead of
     # hull (should be the same, but may differ because of numerical errors)
@@ -72,7 +72,7 @@ def rect2square(shape, plot=False):
         top.translate(Point(-hx / 2, hy))
         shape = merge_shapes([bottom, top])
         lx, ly, hx, hy = shape.bbox()
-    axis_align(shape)
+    shape = axis_align(shape)
     lx, ly, hx, hy = shape.bbox()
     area = hx * hy
     sides = math.sqrt(area)
@@ -115,8 +115,8 @@ def combine_two_squares(a, b, show=False):
     """
     #assert(len(a.hull()) == 4)
     #assert(len(b.hull()) == 4)
-    #axis_align(a)
-    #axis_align(b)
+    #a = axis_align(a)
+    #b = axis_align(b)
 
     _, _, ax, ay = a.bbox()
     _, _, bx, by = b.bbox()
@@ -168,16 +168,16 @@ def combine_two_squares(a, b, show=False):
         plot_line(s3_s, s3_e)
         plot_line(s4_s, s4_e)
 
-    large_t1.translate(Point(lx, sy))
+    large_t1 = large_t1.translate(Point(lx, sy))
 
     x, _, _, _ = large_t2.bbox()
-    large_t2.translate(Point(-x, ly))
+    large_t2 = large_t2.translate(Point(-x, ly))
 
-    small_top.translate(s3_e - Point(lx, sy + ly))
+    small_top = small_top.translate(s3_e - Point(lx, sy + ly))
 
     result = merge_shapes([small_top, small_bot, large_t1, large_t2, large_inner])
 
-    axis_align(result)
+    result = axis_align(result)
 
     if show:
         result.plot((2*lx, 0))
