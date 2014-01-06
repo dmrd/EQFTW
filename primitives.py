@@ -1,6 +1,7 @@
 import math
 import numpy as np
 import matplotlib.pylab as plt
+import matplotlib.animation as animation
 from scipy.spatial import ConvexHull
 from itertools import chain
 
@@ -23,7 +24,8 @@ def show(size=(12, 12)):
 def plot_poly(poly, color=random_color()):
     plt.axis('equal')
     x, y = zip(*(poly + [poly[0]]))
-    plt.fill(x, y, color=color)
+    #return plt.fill(x, y, color=color)
+    return plt.plot(x, y, color=color)
 
 
 def plot_polys(polys):
@@ -33,6 +35,22 @@ def plot_polys(polys):
 
 def plot_line(a, b):
     plt.plot((a.x, b.x), (a.y, b.y))
+
+
+class inverse_draw:
+    def __init__(self, shape, frames):
+        self.shape = shape
+        self.frames = frames
+
+    def __call__(self, i):
+        return self.shape.interpolate(i / float(self.frames)).plot()
+
+
+def animate(shape, parts):
+    fig = plt.figure()
+    func = inverse_draw(shape, parts)
+    frames = [func(i) for i in range(parts + 1)]
+    return animation.ArtistAnimation(fig, frames, interval=100, repeat_delay=3000)
 
 
 class Point(np.ndarray):
@@ -97,6 +115,7 @@ class Shape:
         self.pieces = pieces
         self._bbox = None
         self._hull = None
+        self._inverse = None
 
     def __iter__(self):
         """ Iterate over pieces of the shape """
@@ -145,8 +164,15 @@ class Shape:
             pieces.append(piece.apply_transform(transform))
         return Shape(pieces)
 
-    def inverse(self, percent):
-        return Shape([p.inverse(percent) for p in self.pieces])
+    def reset_transform(self):
+        """ Return a copy of the shape with all transforms reset """
+        return Shape([p.reset_transform() for p in self.pieces])
+
+    def inverse(self):
+        """ Return shape composed of original position for all pieces """
+        if self._inverse is None:
+            self._inverse = Shape([p.inverse() for p in self.pieces])
+        return self._inverse
 
     def copy(self):
         return Shape(self.pieces)
@@ -181,16 +207,31 @@ class Shape:
         return self._hull
 
     def plot(self, shift=None):
-        for piece in self.pieces:
-            piece.plot(shift=shift)
+        res = tuple(piece.plot(shift=shift)[0] for piece in self.pieces)
+        return res
 
     def original_position(self):
-        return self.inverse(1)
+        return self.inverse()
 
-    def animate(self, parts):
-        for i in range(parts):
-            m = (i + 1.0) / parts
-            self.inverse(m).plot()
+    def interpolate(self, percent):
+        inv = self.inverse()
+        pieces = []
+        for orig, cur in zip(inv.pieces, self.pieces):
+            translation = orig.poly[0] - cur.poly[0]
+
+            r1 = normalize(orig.poly[1] - orig.poly[0])
+            r2 = normalize(cur.poly[1] - cur.poly[0])
+
+            angle = vector_angle(r1, r2)
+            #angle = np.arccos(dot(r1, r2))
+            transformed = cur.rotate(cur.poly[0], angle * percent).translate(translation * percent)
+            pieces.append(transformed)
+
+        return Shape(pieces)
+
+    def animate(self, n):
+        for i in range(n):
+            self.interpolate(i/float(n)).plot()
 
 
 class Piece:
@@ -205,6 +246,7 @@ class Piece:
 
         self._bbox = None
         self._hull = None
+        self._inverse = None
 
         if len(self.poly) <= 2:
             print(self.poly)
@@ -274,20 +316,15 @@ class Piece:
         poly = []
         for point in self.poly:
             poly.append(transform_point(point, transform))
-        return Piece(poly, transform=result, ccw_check=False)
+        return Piece(poly, transform=result, color=self.color, ccw_check=False)
 
-    def inverse(self, percent):
-        inverse = np.linalg.inv(self.transform)
-        translation = inverse[0:2, 2]
-        angle = np.arctan(inverse[0, 1] / inverse[0, 0])
-        print("\nTransform: {}".format(percent))
-        print(angle)
-        print(inverse)
-        #print(np.dot(translation_matrix(translation * percent), rotation_matrix(angle * percent)))
-        res = self.apply_transform(
-            np.dot(translation_matrix(translation * percent),
-                   rotation_matrix(angle * percent)))
-        return res
+    def reset_transform(self):
+        return Piece(self.poly, color=self.color, ccw_check=False)
+
+    def inverse(self):
+        if self._inverse is None:
+            self._inverse = self.apply_transform(np.linalg.inv(self.transform))
+        return self._inverse
 
     def area(self):
         pass
@@ -354,16 +391,6 @@ def rotation_matrix(radians):
     return np.array([[ca, sa, 0],
                      [-sa, ca, 0],
                      [0, 0, 1]])
-
-
-def partially_apply(matrix, percent):
-    translation = matrix[0:2, 2]
-    angle = np.arctan(matrix[0, 1] / matrix[0, 0])
-    print(matrix)
-    print(translation)
-    print(angle)
-    print(translation_matrix(translation * percent))
-    return np.dot(translation_matrix(translation * percent), rotation_matrix(angle * percent))
 
 
 def identity_transform():

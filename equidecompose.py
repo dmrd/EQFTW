@@ -47,7 +47,7 @@ def axis_align(shape):
     i = longest_edge(hull)
 
     angle = vector_angle((hull[(i+1) % len(hull)] - hull[i]), Point(1, 0))
-    shape.rotate(hull[i], -angle)
+    shape = shape.rotate(hull[i], -angle)
     mx, my, _, _ = shape.bbox()
     return shape.translate(Point(-mx, -my))
 
@@ -56,8 +56,7 @@ def rect2square(shape, plot=False):
     hull = shape.hull()
     if len(hull) != 4:
         raise Exception("Input shape must be a rectangle")
-    return axis_align(shape)
-
+    shape = axis_align(shape)
     # From here on, assume it is axis aligned and operate on bbox instead of
     # hull (should be the same, but may differ because of numerical errors)
 
@@ -69,7 +68,7 @@ def rect2square(shape, plot=False):
         # Cut in half and stack right half on top of left half
         b_cut, t_cut = extend_line(b_cut, t_cut)
         bottom, top = shape.cut(b_cut, t_cut)
-        top.translate(Point(-hx / 2, hy))
+        top = top.translate(Point(-hx / 2, hy))
         shape = merge_shapes([bottom, top])
         lx, ly, hx, hy = shape.bbox()
     shape = axis_align(shape)
@@ -93,11 +92,11 @@ def rect2square(shape, plot=False):
 
     # Put lower tri in proper place
     lt_lx, lt_ly, _, _ = lower_tri.bbox()
-    lower_tri.translate(Point(lx - lt_lx, hy - lt_ly))
+    lower_tri = lower_tri.translate(Point(lx - lt_lx, hy - lt_ly))
 
     # Put upper tri in proper place
     ut_lx, _, _, ut_hy = upper_tri.bbox()
-    upper_tri.translate(Point(-ut_lx, sides - ut_hy))
+    upper_tri = upper_tri.translate(Point(-ut_lx, sides - ut_hy))
 
     result = merge_shapes([bottom, lower_tri, upper_tri])
 
@@ -108,15 +107,15 @@ def rect2square(shape, plot=False):
     return result
 
 
-def combine_two_squares(a, b, show=False):
+def combine_two_squares(a, b, plot=False):
     """
     Takes two axis aligned squares, with lower left corners at (0, 0).
     Returns a single square composed of their pieces
     """
     #assert(len(a.hull()) == 4)
     #assert(len(b.hull()) == 4)
-    #a = axis_align(a)
-    #b = axis_align(b)
+    a = axis_align(a)
+    b = axis_align(b)
 
     _, _, ax, ay = a.bbox()
     _, _, bx, by = b.bbox()
@@ -136,9 +135,9 @@ def combine_two_squares(a, b, show=False):
         sx, sy = ax, ay
 
     # Stack smaller on top right of large square
-    smaller.translate(Point(lx - sx, ly))
+    smaller = smaller.translate(Point(lx - sx, ly))
 
-    st = Point(lx, sy)  # Vector representing top and bottom of new square
+    #st = Point(lx, sy)  # Vector representing top and bottom of new square
     ss = Point(sy,  -lx)  # Vector representing sides of new square
 
     # All cuts go down or to right
@@ -155,7 +154,7 @@ def combine_two_squares(a, b, show=False):
     large_inner, large_t1 = larger.cut(c2_s, c2_e)
     large_inner, large_t2 = large_inner.cut(c4_s, c4_e)
 
-    if show:
+    if plot:
         #smaller.plot()
         #larger.plot()
         small_top.plot()
@@ -179,8 +178,9 @@ def combine_two_squares(a, b, show=False):
 
     result = axis_align(result)
 
-    if show:
+    if plot:
         result.plot((2*lx, 0))
+        show()
 
     return result
 
@@ -188,7 +188,7 @@ def combine_two_squares(a, b, show=False):
 def combine_squares(squares):
     if any(len(shape.hull()) != 4 for shape in squares):
         raise Exception("All input shapes must be squares")
-    q = deque(squares)
+    q = deque([axis_align(square) for square in squares])
 
     # Combine in pairs of two
     while len(q) > 1:
@@ -256,6 +256,12 @@ def random_square(low=1, high=100):
     return make_shape([(0, 0), (0, s), (s, s), (s, 0)])
 
 
+def random_rect(low=1, high=100):
+    s1 = np.random.randint(low, high)
+    s2 = np.random.randint(low, high)
+    return make_shape([(0, 0), (s2, 0), (s2, s1), (0, s1)])
+
+
 def random_cut_shape(shape):
     lx, ly, hx, hy = shape.bbox()
     x1, x2 = lx + np.random.rand(2) * (hx - lx)
@@ -265,9 +271,4 @@ def random_cut_shape(shape):
 
 def random_example(n):
     triangulated, r = equidecompose_to_square(random_points(n, 0, 50))
-    orig = r.original_position()
-    r.plot()
-    _, _, hx, _ = r.bbox()
-    lx, ly, _, _ = orig.bbox()
-    r.original_position().plot((hx - lx + 1, -ly))
-    show()
+    return animate(r, 30)
