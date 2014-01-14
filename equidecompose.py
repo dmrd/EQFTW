@@ -1,5 +1,6 @@
 import math
-from scipy.spatial import Delaunay, ConvexHull
+from scipy.spatial import ConvexHull
+import p2t
 from collections import deque
 from primitives import *
 
@@ -195,12 +196,11 @@ def triangulate(poly):
     For now just returns the delaunay triangulation for testing (until I get
     a real triangulation library)
     """
-    points = np.array(poly)
-    points = points[ConvexHull(points).vertices]
-    triangles = Delaunay(points).simplices
+    cdt = p2t.CDT(poly)
+    triangles = cdt.triangulate()
     pieces = []
-    for triangle in triangles:
-        pieces.append(Piece(make_poly(points[triangle])))
+    for t in triangles:
+        pieces.append(Piece([Point(t.a.x, t.a.y), Point(t.b.x, t.b.y), Point(t.c.x, t.c.y)]))
     return Shape(pieces)
 
 
@@ -261,3 +261,9 @@ def random_cut_shape(shape):
 def random_example(n):
     triangulated, r = equidecompose_to_square(random_points(n, 0, 50))
     return animate(r, 30)
+
+
+def random_convex(n, l=0, h=100):
+    points = random_points(n, l, h)
+    points = np.asarray(points)
+    return make_poly(list(reversed(points[ConvexHull(points).vertices])))
