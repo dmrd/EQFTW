@@ -46,7 +46,7 @@ class inverse_draw:
         return self.shape.interpolate(i / float(self.frames)).plot()
 
 
-def animate(shape, parts):
+def animate(shape, parts=30):
     fig = plt.figure()
     func = inverse_draw(shape, parts)
     frames = [func(i) for i in range(parts + 1)]
@@ -353,6 +353,17 @@ class Piece:
 
     def original_position(self):
         return self.inverse(1)
+
+
+def axis_align(shape):
+    """ Axis aligns shape """
+    hull = shape.hull()
+    i = longest_edge(hull)
+
+    angle = vector_angle((hull[(i+1) % len(hull)] - hull[i]), Point(1, 0))
+    shape = shape.rotate(hull[i], -angle)
+    mx, my, _, _ = shape.bbox()
+    return shape.translate(Point(-mx, -my))
 
 
 def longest_edge(poly):

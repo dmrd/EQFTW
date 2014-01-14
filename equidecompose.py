@@ -41,17 +41,6 @@ def tri2rect(shape, plot=False):
     return bottom.combine(tl, tr)
 
 
-def axis_align(shape):
-    """ Axis aligns shape """
-    hull = shape.hull()
-    i = longest_edge(hull)
-
-    angle = vector_angle((hull[(i+1) % len(hull)] - hull[i]), Point(1, 0))
-    shape = shape.rotate(hull[i], -angle)
-    mx, my, _, _ = shape.bbox()
-    return shape.translate(Point(-mx, -my))
-
-
 def rect2square(shape, plot=False):
     hull = shape.hull()
     if len(hull) != 4:
