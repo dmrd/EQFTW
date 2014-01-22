@@ -32,6 +32,7 @@ def tri2rect(shape, plot=False):
         tr = tr.rotate(h2, -math.pi)
 
     if plot:
+        shape.plot()
         hull[i].plot()
         mid.plot()
         top_v.plot()
@@ -45,6 +46,9 @@ def tri2rect(shape, plot=False):
 def rect2square(shape, plot=False):
     hull = shape.hull()
     if len(hull) != 4:
+        shape.plot()
+        show()
+        print(hull)
         raise Exception("Input shape must be a rectangle")
     shape = axis_align(shape)
     # From here on, assume it is axis aligned and operate on bbox instead of
@@ -79,6 +83,7 @@ def rect2square(shape, plot=False):
         bottom.plot((-1, 0))
         upper_tri.plot((0, 1))
         lower_tri.plot((1, -1))
+        plt.show()
 
     # Put lower tri in proper place
     lt_lx, lt_ly, _, _ = lower_tri.bbox()
@@ -102,10 +107,25 @@ def combine_two_squares(a, b, plot=False):
     Takes two axis aligned squares, with lower left corners at (0, 0).
     Returns a single square composed of their pieces
     """
-    #assert(len(a.hull()) == 4)
-    #assert(len(b.hull()) == 4)
-    a = axis_align(a)
-    b = axis_align(b)
+    #if len(a.hull()) != 4:
+        #a.plot()
+        #print(a.hull())
+        #raise Exception("Input must be a square")
+    #if len(b.hull()) != 4:
+        #b.plot()
+        #print(b.hull())
+        #raise Exception("Input must be a square")
+    try:
+        a = axis_align(a)
+    except:
+        a.plot()
+        raise Exception(a)
+    try:
+        b = axis_align(b)
+    except:
+        b.plot()
+        raise Exception(b)
+
 
     _, _, ax, ay = a.bbox()
     _, _, bx, by = b.bbox()
@@ -156,6 +176,7 @@ def combine_two_squares(a, b, plot=False):
         plot_line(s2_s, s2_e)
         plot_line(s3_s, s3_e)
         plot_line(s4_s, s4_e)
+        plt.show()
 
     large_t1 = large_t1.translate(Point(lx, sy))
 
@@ -170,7 +191,7 @@ def combine_two_squares(a, b, plot=False):
 
     if plot:
         result.plot((2*lx, 0))
-        show()
+        plt.show()
 
     return result
 
@@ -207,7 +228,6 @@ def triangulate(poly):
 def equidecompose_to_square(polygon):
     triangulated = triangulate(polygon)
     triangulated_shapes = [Shape([piece]) for piece in triangulated.pieces]
-
     squares = []
     for triangle in triangulated_shapes:
         rect = tri2rect(triangle)

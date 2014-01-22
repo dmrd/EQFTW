@@ -5,7 +5,7 @@ import matplotlib.animation as animation
 from scipy.spatial import ConvexHull
 from itertools import chain
 
-EPSILON = 1e-10
+EPSILON = 1e-9
 
 
 def random_color():
@@ -51,6 +51,16 @@ def animate(shape, parts=30):
     func = inverse_draw(shape, parts)
     frames = [func(i) for i in range(parts + 1)]
     return animation.ArtistAnimation(fig, frames, interval=100, repeat_delay=3000)
+
+
+def side_by_side(shape):
+    """ Plot shape and its original position side by side """
+    orig = shape.original_position()
+    p1 = shape.plot()
+    _, _, hx, _ = shape.bbox()
+    lx, ly, _, _ = orig.bbox()
+    p2 = orig.translate((hx - lx, -ly)).plot()
+    return p1, p2
 
 
 class Point(np.ndarray):
@@ -202,8 +212,7 @@ class Shape:
         points = []
         for piece in self.pieces:
             points.extend(piece.poly)
-        points = np.asarray(points)
-        self._hull = make_poly(list(reversed(points[ConvexHull(points).vertices])))
+        self._hull = pointset_hull(points)
         return self._hull
 
     def plot(self, shift=None):
@@ -265,9 +274,18 @@ class Piece:
         """ Check that all turns are cw """
         p = self.poly
         l = len(p)
-        for i in range(l):
-            if not(ccw(p[i], p[(i + 1) % l], p[(i + 2) % l]) == 1):
+        i = 0
+        while i < l:
+            turn = ccw(p[i], p[(i + 1) % l], p[(i + 2) % l])
+            if turn == 0:
+                # Remove unnecessary points along line
+                del p[(i + 1) % l]
+                l -= 1
+            elif not(turn == 1):
                 return False
+            else:
+                i += 1
+
         return True
 
     def __iter__(self):
@@ -353,6 +371,11 @@ class Piece:
 
     def original_position(self):
         return self.inverse(1)
+
+
+def pointset_hull(points):
+    points = np.asarray(list(set(points)))  # Get rid of duplicate points
+    return make_poly(list(reversed(points[ConvexHull(points, qhull_options="Qs Pp").vertices])))
 
 
 def axis_align(shape):
@@ -522,6 +545,9 @@ def split_convex_poly(poly, a, b):
     for i in range(len(poly)):
         hit = intersect(a, b, poly[i], poly[(i+1) % len(poly)])
         if hit is not None:
+            # Don't count essentially parallel lines as intersecting
+            if ccw(poly[0], poly[1], a) == 0 or ccw(poly[0], poly[1], b) == 0:
+                continue
             loc, line_par, edge_par = hit
             if abs(edge_par) < EPSILON:
                 # Reduce numerical errors when line goes through point
@@ -529,7 +555,6 @@ def split_convex_poly(poly, a, b):
             # Don't consider intersection at end of edge
             elif distance(loc, poly[(i+1) % len(poly)]) > EPSILON:
                 hits.append((i, loc, line_par))
-
     # At most 2 intersections for convex polygon and line
     if len(hits) >= 2:
         # Handle numerical errors where same point is found multiple times
@@ -541,6 +566,15 @@ def split_convex_poly(poly, a, b):
 
     if len(hits) > 2:
         raise Exception("More than 2 line-polygon intersections")
+
+    if len(hits) == 2:
+        i1 = hits[0][0]
+        i2 = hits[1][0]
+        # Don't count intersections parallel to edge
+        if ((i1 + 1) % len(poly) == i2
+            and ccw(poly[i1], poly[i2], a) == 0
+            and ccw(poly[i1], poly[i2], b) == 0):
+            hits = []
 
     # Polygon lies on one side of the line
     if len(hits) <= 1:
